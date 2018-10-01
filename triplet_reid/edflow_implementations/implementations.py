@@ -7,8 +7,10 @@ from scipy.misc import imresize
 
 from edflow.iterators.model_iterator import HookedModelIterator
 from edflow.hooks.hook import Hook
+from edflow.iterators.resize import resize_float32
 
-
+# path to checkpoint-25000 contained in
+# https://github.com/VisualComputingInstitute/triplet-reid/releases/download/250eb1/market1501_weights.zip
 TRIP_CHECK = os.environ.get('REID_CHECKPOINT',
                             '/home/johannes/Documents/Uni HD/Dr_J/'
                             'Projects/triplet_reid/triplet_reid/'
@@ -46,7 +48,7 @@ class reIdModel(object):
         model = import_module('triplet_reid.nets.' + model_name)
         head = import_module('triplet_reid.heads.' + head_name)
 
-        self.images = im = tf.placeholder(tf.float32, shape=[None, w, h, nc])
+        self.images = im = tf.placeholder(tf.float32, shape=[None, h, w, nc])
 
         self.idn = 'my_triplet_is_the_best_triplet'
 
@@ -135,9 +137,16 @@ class PrepData(Hook):
 def resize(image, w=TRIP_W, h=TRIP_H):
     ims = []
     for im in image:
-        im = imresize(im, [w, h])
+        if w == h // 2 and im.shape[0] == im.shape[1]:
+            im = resize_float32(im, h)
+            im = im[:, h//4:h//4+w, :]
+        else:
+            assert False
+            im = imresize(im, [w, h])
         ims += [im]
     ims = np.array(ims)
+    # edflow works with images in [-1,1] but reid net expects [0,255]
+    ims = (ims+1.0)*127.5
 
     return ims
 
