@@ -200,6 +200,11 @@ class reIdMetricFn(object):
         orig = self.get_embeddings(image)
         genr = self.get_embeddings(generated)
 
-        dist = np.linalg.norm(orig['emb'] - genr['emb'])
+        orig_e = orig['emb']
+        genr_e = genr['emb']
+
+        diff = orig_e - genr_e
+
+        dist = np.linalg.norm(diff, axis=1)
 
         return dist
