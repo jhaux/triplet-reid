@@ -5,9 +5,14 @@ import numpy as np
 
 from scipy.misc import imresize
 
-from edflow.iterators.model_iterator import HookedModelIterator
+from edflow.iterators.model_iterator import HookedModelIterator, TFHookedModelIterator
 from edflow.hooks.hook import Hook
+from edflow.hooks.train_hooks import LoggingHook
+from edflow.hooks.util_hooks import IntervalHook
 from edflow.iterators.resize import resize_float32
+from edflow.project_manager import ProjectManager
+
+import triplet_reid.loss as loss
 
 # path to checkpoint-25000 contained in
 # https://github.com/VisualComputingInstitute/triplet-reid/releases/download/250eb1/market1501_weights.zip
@@ -48,14 +53,13 @@ class reIdModel(object):
         model = import_module('triplet_reid.nets.' + model_name)
         head = import_module('triplet_reid.heads.' + head_name)
 
-        self.images = im = tf.placeholder(tf.float32, shape=[None, h, w, nc])
+        self.model_name = 'my_triplet_is_the_best_triplet'
 
-        self.idn = 'my_triplet_is_the_best_triplet'
-
-        with tf.variable_scope(self.idn):
-            endpoints, body_prefix = model.endpoints(im,
+        with tf.variable_scope(self.model_name):
+            self.images = tf.placeholder(tf.float32, shape=[None, h, w, nc])
+            endpoints, body_prefix = model.endpoints(self.images,
                                                      is_training=is_train,
-                                                     prefix=self.idn + '/')
+                                                     prefix=self.model_name + '/')
             with tf.name_scope('head'):
                 endpoints = head.head(endpoints,
                                       edim,
@@ -64,7 +68,7 @@ class reIdModel(object):
         self.embeddings = endpoints
 
         globs = tf.global_variables()
-        self.variables = [v for v in globs if self.idn in v.name]
+        self.variables = [v for v in globs if self.model_name in v.name]
 
     @property
     def inputs(self):
@@ -73,6 +77,91 @@ class reIdModel(object):
     @property
     def outputs(self):
         return {'embeddings': self.embeddings}
+
+
+class EdflowModel(reIdModel):
+    def __init__(self, config):
+        self.config = config
+        base_config = dict(
+                 model_name=config.get("backbone", 'resnet_v1_50'),
+                 head_name=config.get("head_name", 'fc1024'),
+                 w=config.get("input_width", TRIP_W),
+                 h=config.get("input_height", TRIP_H),
+                 nc=config.get("nc", 3),
+                 edim=config.get("edim", 128),
+                 is_train=not config.get("test_mode", False))
+        super().__init__(**base_config)
+
+
+class Unstack(Hook):
+    def __init__(self, iterator):
+        self.iterator = iterator
+
+    def before_step(self, index, fetches, feeds, batch):
+        # modify feeds to unstack examples
+        image = feeds[self.iterator.model.inputs["image"]]
+        bs, n_views, h, w, c = image.shape
+        image = image.reshape(bs*n_views, h, w, c)
+        # possibly remove alpha channel
+        assert c in [3,4]
+        if c == 4:
+            image = image[...,:3]
+        feeds[self.iterator.model.inputs["image"]] = image
+
+        pids = batch["pid"]
+        bs, n_views = pids.shape
+        pids = pids.reshape(bs*n_views)
+        feeds[self.iterator.pid_placeholder] = pids
+
+
+class Trainer(TFHookedModelIterator):
+    def __init__(self, config, root, model, **kwargs):
+        unstackhook = Unstack(self)
+        kwargs["hook_freq"] = 1
+        kwargs["hooks"] = [unstackhook]
+        super().__init__(config, root, model, **kwargs)
+        self._init_step_ops()
+
+    def initialize(self, checkpoint_path = None):
+        # if none given use market pretrained
+        assert checkpoint_path is None
+        checkpoint_path = checkpoint_path or TRIP_CHECK
+        initialize_model(self.model, checkpoint_path, self.session)
+
+    def step_ops(self):
+        return self._step_ops
+
+    def _init_step_ops(self):
+        # additional inputs
+        self.pid_placeholder = tf.placeholder(tf.string, shape=[None])
+
+        # loss
+        endpoints = self.model.embeddings
+        dists = loss.cdist(endpoints['emb'], endpoints['emb'],
+                metric=self.config.get("metric", "euclidean"))
+        losses, train_top1, prec_at_k, _, neg_dists, pos_dists = (
+                loss.LOSS_CHOICES["batch_hard"](
+                    dists, self.pid_placeholder, self.config.get("margin", "soft"),
+                    batch_precision_at_k=self.config.get("n_views", 4)-1))
+
+        # Count the number of active entries, and compute the total batch loss.
+        loss_mean = tf.reduce_mean(losses)
+
+        # train op
+        learning_rate = self.config.get("learning_rate", 3e-4)
+        optimizer = tf.train.AdamOptimizer(learning_rate)
+        with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+            train_op = optimizer.minimize(loss_mean)
+        self._step_ops = train_op
+
+        loghook = LoggingHook(
+                logs = {"loss": loss_mean},
+                images = {"image": self.model.inputs["image"]},
+                root_path = ProjectManager().train)
+        loghook = IntervalHook([loghook],
+                interval = 1, modify_each = 1,
+                max_interval = self.config.get("log_freq", 1000))
+        self.hooks.append(loghook)
 
 
 class reIdEvaluator(HookedModelIterator):
@@ -115,7 +204,7 @@ def initialize_model(model, checkpoint, session=None):
 
     var_map = {}
     for v in model.variables:
-        vn = v.name.strip(model.idn).strip('/').strip(':0')
+        vn = v.name.strip(model.model_name).strip('/').strip(':0')
         var_map = {vn: v}
 
     tf.train.Saver(var_map).restore(sess, checkpoint)
