@@ -1,9 +1,11 @@
 import tensorflow as tf
-import os
+import os, json
 from importlib import import_module
 import numpy as np
 
 from scipy.misc import imresize
+from scipy.spatial.distance import cdist
+from sklearn.metrics import average_precision_score
 
 from edflow.iterators.model_iterator import HookedModelIterator, TFHookedModelIterator
 from edflow.hooks.hook import Hook
@@ -11,6 +13,7 @@ from edflow.hooks.train_hooks import LoggingHook, CheckpointHook
 from edflow.hooks.util_hooks import IntervalHook
 from edflow.iterators.resize import resize_float32
 from edflow.project_manager import ProjectManager
+from edflow.custom_logging import get_logger
 
 import triplet_reid.loss as loss
 
@@ -316,9 +319,95 @@ class reIdMetricFn(object):
         return dist
 
 
+class EvalHook(Hook):
+    def __init__(self, iterator):
+        self.iterator = iterator
+        self.logger = get_logger(self, "latest_eval")
+        self.global_step = self.iterator.get_global_step
+
+    def before_epoch(self, *args, **kwargs):
+        self.data = dict()
+
+    def before_step(self, step, fetches, feeds, batch):
+        for key in ["pid", "name", "dataset_index_"]:
+            if key in self.data:
+                self.data[key] = np.concatenate([self.data[key], batch[key]])
+            else:
+                self.data[key] = batch[key]
+
+    def after_step(self, step, results):
+        for key in ["embeddings"]:
+            if key in self.data:
+                self.data[key] = np.concatenate([self.data[key], results[key]])
+            else:
+                self.data[key] = results[key]
+
+    def after_epoch(self, ep):
+        query_data = dict()
+        gallery_data = dict()
+        for key in self.data:
+            query_data[key] = self.data[key][self.data["dataset_index_"] == 0]
+            gallery_data[key] = self.data[key][self.data["dataset_index_"] == 1]
+
+        # evaluation as in original evaluate.py
+        distances = cdist(query_data["embeddings"], gallery_data["embeddings"], metric = "euclidean")
+
+        # Compute the pid matches
+        pid_matches = gallery_data["pid"][None] == query_data["pid"][:,None]
+
+        # Get a mask indicating True for those gallery entries that should
+        # be ignored for whatever reason (same camera, junk, ...) and
+        # exclude those in a way that doesn't affect CMC and mAP.
+        #mask = excluder(fids)
+        #distances[mask] = np.inf
+        #pid_matches[mask] = False
+
+        # Keep track of statistics. Invert distances to scores using any
+        # arbitrary inversion, as long as it's monotonic and well-behaved,
+        # it won't change anything.
+        aps = []
+        cmc = np.zeros(len(gallery_data["pid"]), dtype=np.int32)
+        scores = 1 / (1 + distances)
+        for i in range(len(distances)):
+            ap = average_precision_score(pid_matches[i], scores[i])
+
+            if np.isnan(ap):
+                print()
+                print("WARNING: encountered an AP of NaN!")
+                print("This usually means a person only appears once.")
+                print("In this case, it's because of {}.".format(query_data["fid"][i]))
+                print("I'm excluding this person from eval and carrying on.")
+                print()
+                continue
+
+            aps.append(ap)
+            # Find the first true match and increment the cmc data from there on.
+            k = np.where(pid_matches[i, np.argsort(distances[i])])[0][0]
+            cmc[k:] += 1
+
+    # Compute the actual cmc and mAP values
+    cmc = cmc / len(query_pids)
+    mean_ap = np.mean(aps)
+
+    # Save important data
+    metric = {"mAP": np.array([mean_ap, 0.0])}
+    name = '{:0>6d}_metrics'.format(self.global_step())
+    name = os.path.join(self.root, name)
+    np.savez_compressed(name, **mean_results)
+
+    json.dump({'mAP': mean_ap, 'CMC': list(cmc), 'aps': list(aps)},
+            os.path.join(root, "{:0>6d}_all.json".format(self.global_step)))
+
+    # Print out a short summary.
+    print('mAP: {:.2%} | top-1: {:.2%} top-2: {:.2%} | top-5: {:.2%} | top-10: {:.2%}'.format(
+        mean_ap, cmc[0], cmc[1], cmc[4], cmc[9]))
+
+
+
 class Evaluator(TFHookedModelIterator):
     def __init__(self, config, root, model, **kwargs):
         super().__init__(config, root, model, num_epochs = 1, **kwargs)
+        self.hooks += [EvalHook(self)]
         self.initialize()
 
     def step_ops(self):
