@@ -157,7 +157,8 @@ class Trainer(TFHookedModelIterator):
         loghook = LoggingHook(
                 logs = {"loss": loss_mean},
                 images = {"image": self.model.inputs["image"]},
-                root_path = ProjectManager().train)
+                root_path = ProjectManager().train,
+                interval = 1)
         loghook = IntervalHook([loghook],
                 interval = 1, modify_each = 1,
                 max_interval = self.config.get("log_freq", 1000))
