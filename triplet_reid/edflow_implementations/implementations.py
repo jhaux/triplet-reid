@@ -314,3 +314,18 @@ class reIdMetricFn(object):
         dist = np.linalg.norm(diff, axis=1)
 
         return dist
+
+
+class Evaluator(TFHookedModelIterator):
+    def __init__(self, config, root, model, **kwargs):
+        super().__init__(config, root, model, num_epochs = 1, **kwargs)
+        self.initialize()
+
+    def step_ops(self):
+        return self.model.outputs
+
+    def initialize(self, checkpoint_path = None):
+        # if none given use market pretrained
+        assert checkpoint_path is None
+        checkpoint_path = checkpoint_path or TRIP_CHECK
+        initialize_model(self.model, checkpoint_path, self.session)

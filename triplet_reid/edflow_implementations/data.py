@@ -1,13 +1,15 @@
 from hbu_journal.data.ntu import PretrainDataset
 import numpy as np
-from edflow.data.dataset import ProcessedDataset, JoinedDataset
+from edflow.data.dataset import (
+        ProcessedDataset, JoinedDataset,
+        ConcatenatedDataset, SubDataset)
 from edflow.iterators.batches import save_image
 
 
 def center_crop(**kwargs):
     image = kwargs["target"]
     h,w,c = image.shape
-    image = image[:,w//4:w//4+w//2,:]
+    image = image[:,w//4:w//4+w//2,:3]
     return {"image": image}
 
 
@@ -22,6 +24,18 @@ def PretrainReidNTU(config):
     dataset = JoinedDataset(ntu, "pid", config.get("n_views", 4))
 
     return dataset
+
+
+def QueryGalleryNTU(config):
+    prng = np.random.RandomState(1)
+    query = PretrainDataset(config)
+    query = SubDataset(query, prng.choice(len(query), 100))
+    gallery = PretrainDataset(config)
+    gallery = SubDataset(gallery, prng.choice(len(gallery), 100))
+
+    data = ConcatenatedDataset(query, gallery)
+    data = ProcessedDataset(data, center_crop)
+    return data
     
 
 if __name__ == "__main__":
