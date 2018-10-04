@@ -7,7 +7,7 @@ from scipy.misc import imresize
 
 from edflow.iterators.model_iterator import HookedModelIterator, TFHookedModelIterator
 from edflow.hooks.hook import Hook
-from edflow.hooks.train_hooks import LoggingHook
+from edflow.hooks.train_hooks import LoggingHook, CheckpointHook
 from edflow.hooks.util_hooks import IntervalHook
 from edflow.iterators.resize import resize_float32
 from edflow.project_manager import ProjectManager
@@ -159,10 +159,17 @@ class Trainer(TFHookedModelIterator):
                 images = {"image": self.model.inputs["image"]},
                 root_path = ProjectManager().train,
                 interval = 1)
-        loghook = IntervalHook([loghook],
+        ckpt_hook = CheckpointHook(
+                root_path = ProjectManager().checkpoints,
+                variables = tf.global_variables(),
+                modelname = self.model.name,
+                step = self.get_global_step,
+                interval = 1,
+                max_to_keep = 2)
+        ihook = IntervalHook([loghook, ckpt_hook],
                 interval = 1, modify_each = 1,
                 max_interval = self.config.get("log_freq", 1000))
-        self.hooks.append(loghook)
+        self.hooks.append(ihook)
 
 
 class reIdEvaluator(HookedModelIterator):
