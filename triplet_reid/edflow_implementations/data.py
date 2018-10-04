@@ -11,15 +11,6 @@ def center_crop(**kwargs):
     return {"image": image}
 
 
-def stack(**kwargs):
-    r = dict()
-    for k in ["image", "pid"]:
-        k_keys = kwargs[k]
-        k_values = [kwargs[k_key] for k_key in k_keys]
-        r[k] = np.stack(k_values, axis = 0)
-    return r
-
-
 def PretrainReidNTU(config):
     # base dataset
     ntu = PretrainDataset(config)
@@ -29,9 +20,6 @@ def PretrainReidNTU(config):
 
     # get multiple views of same pid
     dataset = JoinedDataset(ntu, "pid", config.get("n_views", 4))
-
-    # stack images and pid
-    dataset = ProcessedDataset(dataset, stack)
 
     return dataset
     
