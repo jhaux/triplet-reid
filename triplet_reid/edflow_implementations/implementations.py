@@ -10,7 +10,7 @@ from sklearn.metrics import average_precision_score
 from edflow.iterators.model_iterator import HookedModelIterator, TFHookedModelIterator
 from edflow.hooks.hook import Hook
 from edflow.hooks.train_hooks import LoggingHook, CheckpointHook
-from edflow.hooks.evaluation_hooks import WaitForCheckpointHook
+from edflow.hooks.evaluation_hooks import WaitForCheckpointHook, RestoreModelHook
 from edflow.hooks.util_hooks import IntervalHook
 from edflow.iterators.resize import resize_float32
 from edflow.project_manager import ProjectManager
@@ -426,7 +426,12 @@ class EvalHook(Hook):
 class Evaluator(TFHookedModelIterator):
     def __init__(self, config, root, model, **kwargs):
         super().__init__(config, root, model, num_epochs = 1, **kwargs)
-        self.hooks += [WaitForCheckpointHook(ProjectManager().checkpoints), EvalHook(self)]
+        self.hooks += [
+                WaitForCheckpointHook(ProjectManager().checkpoints),
+                RestoreModelHook(tf.global_variables(),
+                                 ProjectManager().checkpoints,
+                                 self.set_global_step),
+                EvalHook(self)]
         self.initialize()
 
     def step_ops(self):
