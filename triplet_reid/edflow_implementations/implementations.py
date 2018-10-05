@@ -14,8 +14,10 @@ from edflow.hooks.util_hooks import IntervalHook
 from edflow.iterators.resize import resize_float32
 from edflow.project_manager import ProjectManager
 from edflow.custom_logging import get_logger
+from edflow.util import retrieve, walk
 
 import triplet_reid.loss as loss
+from triplet_reid.excluders.diagonal import Excluder
 
 # path to checkpoint-25000 contained in
 # https://github.com/VisualComputingInstitute/triplet-reid/releases/download/250eb1/market1501_weights.zip
@@ -324,6 +326,7 @@ class EvalHook(Hook):
         self.iterator = iterator
         self.logger = get_logger(self, "latest_eval")
         self.global_step = self.iterator.get_global_step
+        self.root = ProjectManager().latest_eval
 
     def before_epoch(self, *args, **kwargs):
         self.data = dict()
@@ -336,11 +339,12 @@ class EvalHook(Hook):
                 self.data[key] = batch[key]
 
     def after_step(self, step, results):
-        for key in ["embeddings"]:
+        for key in ["step_ops/emb"]:
+            result = retrieve(key, results)
             if key in self.data:
-                self.data[key] = np.concatenate([self.data[key], results[key]])
+                self.data[key] = np.concatenate([self.data[key], result])
             else:
-                self.data[key] = results[key]
+                self.data[key] = result
 
     def after_epoch(self, ep):
         query_data = dict()
@@ -350,7 +354,8 @@ class EvalHook(Hook):
             gallery_data[key] = self.data[key][self.data["dataset_index_"] == 1]
 
         # evaluation as in original evaluate.py
-        distances = cdist(query_data["embeddings"], gallery_data["embeddings"], metric = "euclidean")
+        distances = cdist(query_data["step_ops/emb"], gallery_data["step_ops/emb"],
+                metric = "euclidean")
 
         # Compute the pid matches
         pid_matches = gallery_data["pid"][None] == query_data["pid"][:,None]
@@ -358,9 +363,10 @@ class EvalHook(Hook):
         # Get a mask indicating True for those gallery entries that should
         # be ignored for whatever reason (same camera, junk, ...) and
         # exclude those in a way that doesn't affect CMC and mAP.
-        #mask = excluder(fids)
-        #distances[mask] = np.inf
-        #pid_matches[mask] = False
+        excluder = Excluder(gallery_data["name"])
+        mask = excluder(query_data["name"])
+        distances[mask] = np.inf
+        pid_matches[mask] = False
 
         # Keep track of statistics. Invert distances to scores using any
         # arbitrary inversion, as long as it's monotonic and well-behaved,
@@ -372,12 +378,13 @@ class EvalHook(Hook):
             ap = average_precision_score(pid_matches[i], scores[i])
 
             if np.isnan(ap):
-                print()
-                print("WARNING: encountered an AP of NaN!")
-                print("This usually means a person only appears once.")
-                print("In this case, it's because of {}.".format(query_data["fid"][i]))
-                print("I'm excluding this person from eval and carrying on.")
-                print()
+                logwarn = self.logger.warn
+                logwarn()
+                logwarn("WARNING: encountered an AP of NaN!")
+                logwarn("This usually means a person only appears once.")
+                logwarn("In this case, it's because of {}.".format(query_data["fid"][i]))
+                logwarn("I'm excluding this person from eval and carrying on.")
+                logwarn()
                 continue
 
             aps.append(ap)
@@ -385,22 +392,23 @@ class EvalHook(Hook):
             k = np.where(pid_matches[i, np.argsort(distances[i])])[0][0]
             cmc[k:] += 1
 
-    # Compute the actual cmc and mAP values
-    cmc = cmc / len(query_pids)
-    mean_ap = np.mean(aps)
+        # Compute the actual cmc and mAP values
+        cmc = cmc / len(query_data["pid"])
+        mean_ap = np.mean(aps)
 
-    # Save important data
-    metric = {"mAP": np.array([mean_ap, 0.0])}
-    name = '{:0>6d}_metrics'.format(self.global_step())
-    name = os.path.join(self.root, name)
-    np.savez_compressed(name, **mean_results)
+        # Save important data
+        metric = {"mAP": np.array([mean_ap, 0.0])}
+        name = '{:0>6d}_metrics'.format(self.global_step())
+        name = os.path.join(self.root, name)
+        np.savez_compressed(name, **metric)
 
-    json.dump({'mAP': mean_ap, 'CMC': list(cmc), 'aps': list(aps)},
-            os.path.join(root, "{:0>6d}_all.json".format(self.global_step)))
+        #json.dump({'mAP': mean_ap, 'CMC': list(cmc), 'aps': list(aps)},
+        #        os.path.join(self.root, "{:0>6d}_all.json".format(self.global_step())))
 
-    # Print out a short summary.
-    print('mAP: {:.2%} | top-1: {:.2%} top-2: {:.2%} | top-5: {:.2%} | top-10: {:.2%}'.format(
-        mean_ap, cmc[0], cmc[1], cmc[4], cmc[9]))
+        # Print out a short summary.
+        self.iterator.logger.info(
+                'mAP: {:.2%} | top-1: {:.2%} top-2: {:.2%} | top-5: {:.2%} | top-10: {:.2%}'.format(
+                    mean_ap, cmc[0], cmc[1], cmc[4], cmc[9]))
 
 
 
@@ -411,7 +419,7 @@ class Evaluator(TFHookedModelIterator):
         self.initialize()
 
     def step_ops(self):
-        return self.model.outputs
+        return {"emb": self.model.outputs["embeddings"]["emb"]}
 
     def initialize(self, checkpoint_path = None):
         # if none given use market pretrained
