@@ -1,5 +1,5 @@
 import tensorflow as tf
-import os, json
+import os, json, pickle
 from importlib import import_module
 import numpy as np
 
@@ -10,6 +10,7 @@ from sklearn.metrics import average_precision_score
 from edflow.iterators.model_iterator import HookedModelIterator, TFHookedModelIterator
 from edflow.hooks.hook import Hook
 from edflow.hooks.train_hooks import LoggingHook, CheckpointHook
+from edflow.hooks.evaluation_hooks import WaitForCheckpointHook
 from edflow.hooks.util_hooks import IntervalHook
 from edflow.iterators.resize import resize_float32
 from edflow.project_manager import ProjectManager
@@ -357,6 +358,16 @@ class EvalHook(Hook):
         distances = cdist(query_data["step_ops/emb"], gallery_data["step_ops/emb"],
                 metric = "euclidean")
 
+        # save everything required for evaluation
+        eval_data = {
+                "query_data": query_data,
+                "gallery_data": gallery_data,
+                "distances": distances}
+        picklename = '{:0>6d}_eval_data.p'.format(self.global_step())
+        picklename = os.path.join(self.root, picklename)
+        with open(picklename, "wb") as f:
+            pickle.dump(eval_data, f)
+
         # Compute the pid matches
         pid_matches = gallery_data["pid"][None] == query_data["pid"][:,None]
 
@@ -415,7 +426,7 @@ class EvalHook(Hook):
 class Evaluator(TFHookedModelIterator):
     def __init__(self, config, root, model, **kwargs):
         super().__init__(config, root, model, num_epochs = 1, **kwargs)
-        self.hooks += [EvalHook(self)]
+        self.hooks += [WaitForCheckpointHook(ProjectManager().checkpoints), EvalHook(self)]
         self.initialize()
 
     def step_ops(self):
