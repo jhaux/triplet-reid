@@ -418,8 +418,8 @@ class EvalHook(Hook):
 
         # Print out a short summary.
         self.iterator.logger.info(
-                'mAP: {:.2%} | top-1: {:.2%} top-2: {:.2%} | top-5: {:.2%} | top-10: {:.2%}'.format(
-                    mean_ap, cmc[0], cmc[1], cmc[4], cmc[9]))
+                'step: {:06} | mAP: {:.2%} | top-1: {:.2%} top-2: {:.2%} | top-5: {:.2%} | top-10: {:.2%}'.format(
+                    self.global_step(), mean_ap, cmc[0], cmc[1], cmc[4], cmc[9]))
 
 
 
