@@ -10,7 +10,8 @@ from sklearn.metrics import average_precision_score
 from edflow.iterators.model_iterator import HookedModelIterator, TFHookedModelIterator
 from edflow.hooks.hook import Hook
 from edflow.hooks.train_hooks import LoggingHook, CheckpointHook
-from edflow.hooks.evaluation_hooks import WaitForCheckpointHook, RestoreTFModelHook
+from edflow.hooks.evaluation_hooks import (
+        WaitForCheckpointHook, RestoreTFModelHook, KeepBestCheckpoints)
 from edflow.hooks.util_hooks import IntervalHook
 from edflow.iterators.resize import resize_float32
 from edflow.project_manager import ProjectManager
@@ -127,12 +128,19 @@ class Trainer(TFHookedModelIterator):
         kwargs["hooks"] = [unstackhook]
         super().__init__(config, root, model, **kwargs)
         self._init_step_ops()
+        restorer = RestoreTFModelHook(variables = tf.global_variables(),
+                                      checkpoint_path = ProjectManager().checkpoints,
+                                      global_step_setter = self.set_global_step)
+        self.restorer = restorer
 
     def initialize(self, checkpoint_path = None):
         # if none given use market pretrained
-        assert checkpoint_path is None
-        checkpoint_path = checkpoint_path or TRIP_CHECK
-        initialize_model(self.model, checkpoint_path, self.session)
+        if checkpoint_path is None:
+            checkpoint_path = checkpoint_path or TRIP_CHECK
+            initialize_model(self.model, checkpoint_path, self.session)
+        else:
+            with self.session.as_default():
+                self.restorer(checkpoint_path)
 
     def step_ops(self):
         return self._step_ops
@@ -171,7 +179,7 @@ class Trainer(TFHookedModelIterator):
                 modelname = self.model.name,
                 step = self.get_global_step,
                 interval = 1,
-                max_to_keep = 2)
+                max_to_keep = None)
         ihook = IntervalHook([loghook, ckpt_hook],
                 interval = 1, modify_each = 1,
                 max_interval = self.config.get("log_freq", 1000))
@@ -328,6 +336,7 @@ class EvalHook(Hook):
         self.logger = get_logger(self, "latest_eval")
         self.global_step = self.iterator.get_global_step
         self.root = ProjectManager().latest_eval
+        self.tb_saver = tf.summary.FileWriter(self.root)
 
     def before_epoch(self, *args, **kwargs):
         self.data = dict()
@@ -408,13 +417,17 @@ class EvalHook(Hook):
         mean_ap = np.mean(aps)
 
         # Save important data
-        metric = {"mAP": np.array([mean_ap, 0.0])}
+        map_ = np.array([mean_ap, 0.0])
+        metric = {"mAP": map_, "-mAP": -map_}
         name = '{:0>6d}_metrics'.format(self.global_step())
         name = os.path.join(self.root, name)
         np.savez_compressed(name, **metric)
 
-        #json.dump({'mAP': mean_ap, 'CMC': list(cmc), 'aps': list(aps)},
-        #        os.path.join(self.root, "{:0>6d}_all.json".format(self.global_step())))
+        # for visualization in tb
+        summary = tf.Summary()
+        summary.value.add(tag="mAP", simple_value=map_[0])
+        self.tb_saver.add_summary(summary, self.global_step())
+        self.tb_saver.flush()
 
         # Print out a short summary.
         self.iterator.logger.info(
@@ -425,16 +438,34 @@ class EvalHook(Hook):
 
 class Evaluator(TFHookedModelIterator):
     def __init__(self, config, root, model, **kwargs):
+        config["eval_forever"] = True
         super().__init__(config, root, model, num_epochs = 1, **kwargs)
+
         restorer = RestoreTFModelHook(variables = tf.global_variables(),
                                       checkpoint_path = ProjectManager().checkpoints,
                                       global_step_setter = self.set_global_step)
+        self.restorer = restorer
+        def has_eval(checkpoint):
+            global_step = restorer.parse_global_step(checkpoint)
+            eval_file = os.path.join(ProjectManager().latest_eval,
+                                     "{:06}_metrics.npz".format(global_step))
+            return not os.path.exists(eval_file)
+
         waiter = WaitForCheckpointHook(checkpoint_root = ProjectManager().checkpoints,
+                                       filter_cond = has_eval,
                                        callback = restorer)
         evaluation = EvalHook(self)
+
+        manager = KeepBestCheckpoints(checkpoint_root = ProjectManager().checkpoints,
+                                      metric_template = os.path.join(
+                                          ProjectManager().latest_eval,
+                                          "{:06}_metrics.npz"),
+                                      metric_key = "-mAP",
+                                      n_keep = 2)
         self.hooks += [
                 waiter,
-                evaluation]
+                evaluation,
+                manager]
         self.initialize()
 
     def step_ops(self):
@@ -442,6 +473,8 @@ class Evaluator(TFHookedModelIterator):
 
     def initialize(self, checkpoint_path = None):
         # if none given use market pretrained
-        assert checkpoint_path is None
-        checkpoint_path = checkpoint_path or TRIP_CHECK
-        initialize_model(self.model, checkpoint_path, self.session)
+        if checkpoint_path is None:
+            checkpoint_path = checkpoint_path or TRIP_CHECK
+            initialize_model(self.model, checkpoint_path, self.session)
+        else:
+            self.restorer(checkpoint_path)

@@ -27,11 +27,12 @@ def PretrainReidNTU(config):
 
 
 def QueryGalleryNTU(config):
+    n_examples = 100
     prng = np.random.RandomState(1)
     query = PretrainDataset(config)
-    query = SubDataset(query, prng.choice(len(query), 100))
+    query = SubDataset(query, prng.choice(len(query), n_examples))
     gallery = PretrainDataset(config)
-    gallery = SubDataset(gallery, prng.choice(len(gallery), 100))
+    gallery = SubDataset(gallery, prng.choice(len(gallery), n_examples))
 
     data = ConcatenatedDataset(query, gallery)
     data = ProcessedDataset(data, center_crop)
