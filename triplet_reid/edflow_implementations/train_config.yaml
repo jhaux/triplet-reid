@@ -12,3 +12,5 @@ hook_freq: 250
 log_freq: 1000
 ckpt_freq: 1000
 num_steps: 25000
+
+learning_rate: 3.0e-5

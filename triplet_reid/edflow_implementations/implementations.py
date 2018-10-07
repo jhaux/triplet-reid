@@ -163,13 +163,17 @@ class Trainer(TFHookedModelIterator):
 
         # train op
         learning_rate = self.config.get("learning_rate", 3e-4)
+        self.logger.info("Training with learning rate: {}".format(learning_rate))
         optimizer = tf.train.AdamOptimizer(learning_rate)
         with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
             train_op = optimizer.minimize(loss_mean)
         self._step_ops = train_op
 
+        tolog = {"loss": loss_mean, "top1": train_top1,
+                "prec@{}".format(self.config.get("n_views", 4)-1): prec_at_k}
         loghook = LoggingHook(
-                logs = {"loss": loss_mean},
+                logs = tolog,
+                scalars = tolog,
                 images = {"image": self.model.inputs["image"]},
                 root_path = ProjectManager().train,
                 interval = 1)
