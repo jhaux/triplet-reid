@@ -178,9 +178,10 @@ class Trainer(TFHookedModelIterator):
                 variables = tf.global_variables(),
                 modelname = self.model.name,
                 step = self.get_global_step,
-                interval = 1,
+                interval = 100,
                 max_to_keep = None)
-        ihook = IntervalHook([loghook, ckpt_hook],
+        self.hooks.append(ckpt_hook)
+        ihook = IntervalHook([loghook],
                 interval = 1, modify_each = 1,
                 max_interval = self.config.get("log_freq", 1000))
         self.hooks.append(ihook)
