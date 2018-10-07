@@ -1,5 +1,5 @@
 model: triplet_reid.edflow_implementations.implementations.EdflowModel
-dataset: triplet_reid.edflow_implementations.data.PretrainReidNTU
+dataset: triplet_reid.edflow_implementations.data.Train
 iterator: triplet_reid.edflow_implementations.implementations.Trainer
 
 n_views: 4

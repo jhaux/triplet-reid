@@ -1,5 +1,5 @@
 model: triplet_reid.edflow_implementations.implementations.EdflowModel
-dataset: triplet_reid.edflow_implementations.data.QueryGalleryNTU
+dataset: triplet_reid.edflow_implementations.data.Eval
 iterator: triplet_reid.edflow_implementations.implementations.Evaluator
 
 batch_size: 16

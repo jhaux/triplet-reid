@@ -19,7 +19,7 @@ from edflow.custom_logging import get_logger
 from edflow.util import retrieve, walk
 
 import triplet_reid.loss as loss
-from triplet_reid.excluders.diagonal import Excluder
+from triplet_reid.excluders.ntugems import Excluder
 
 # path to checkpoint-25000 contained in
 # https://github.com/VisualComputingInstitute/triplet-reid/releases/download/250eb1/market1501_weights.zip
@@ -178,7 +178,7 @@ class Trainer(TFHookedModelIterator):
                 variables = tf.global_variables(),
                 modelname = self.model.name,
                 step = self.get_global_step,
-                interval = 100,
+                interval = 1000,
                 max_to_keep = None)
         self.hooks.append(ckpt_hook)
         ihook = IntervalHook([loghook],
@@ -465,8 +465,9 @@ class Evaluator(TFHookedModelIterator):
                                       n_keep = 2)
         self.hooks += [
                 waiter,
-                evaluation,
-                manager]
+                evaluation]
+        if config.get("manage_checkpoints", False):
+                self.hooks += [manager]
         self.initialize()
 
     def step_ops(self):
