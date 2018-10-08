@@ -126,7 +126,7 @@ class Trainer(TFHookedModelIterator):
         unstackhook = Unstack(self)
         kwargs["hook_freq"] = 1
         kwargs["hooks"] = [unstackhook]
-        super().__init__(config, root, model, **kwargs)
+        super().__init__(config, root, model, num_epochs = config["num_epochs"], **kwargs)
         self._init_step_ops()
         restorer = RestoreTFModelHook(variables = tf.global_variables(),
                                       checkpoint_path = ProjectManager().checkpoints,
@@ -136,7 +136,7 @@ class Trainer(TFHookedModelIterator):
     def initialize(self, checkpoint_path = None):
         # if none given use market pretrained
         if checkpoint_path is None:
-            checkpoint_path = checkpoint_path or TRIP_CHECK
+            checkpoint_path = TRIP_CHECK
             initialize_model(self.model, checkpoint_path, self.session)
         else:
             with self.session.as_default():
@@ -182,7 +182,7 @@ class Trainer(TFHookedModelIterator):
                 variables = tf.global_variables(),
                 modelname = self.model.name,
                 step = self.get_global_step,
-                interval = 1000,
+                interval = self.config.get("ckpt_freq", 1000),
                 max_to_keep = None)
         self.hooks.append(ckpt_hook)
         ihook = IntervalHook([loghook],
@@ -232,9 +232,10 @@ def initialize_model(model, checkpoint, session=None):
     var_map = {}
     for v in model.variables:
         vn = v.name.strip(model.model_name).strip('/').strip(':0')
-        var_map = {vn: v}
+        var_map[vn] = v
 
     tf.train.Saver(var_map).restore(sess, checkpoint)
+    get_logger("initialize_model").info("Restored model from {}".format(checkpoint))
 
 
 class PrepData(Hook):
