@@ -308,7 +308,16 @@ class reIdMetricFn(object):
         self.session = session or tf.Session(config=sess_config)
 
         self.model = reIdModel()
-        initialize_model(self.model, TRIP_CHECK, self.session)
+        if os.path.basename(TRIP_CHECK) == "checkpoint-25000":
+            # assume that this is Market pretrained checkpoint
+            initialize_model(self.model, TRIP_CHECK, self.session)
+        else:
+            # assume this is checkpoint trained by ourselve
+            with self.session.as_default():
+                restorer = RestoreTFModelHook(variables = tf.global_variables(),
+                                              checkpoint_path = None)
+                restorer(TRIP_CHECK)
+
 
     def get_embeddings(self, images):
         fetches = self.model.outputs
