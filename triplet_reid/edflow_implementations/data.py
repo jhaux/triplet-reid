@@ -23,35 +23,11 @@ def add_labels(data, idx):
     file_id = data.labels["file_id"][idx]
     labels["pid"] = "S{:03}P{:03}".format(S, P)
     labels["name"] = file_id
+    # furthermore, keypoints and box are not properly prepared to be stacked,
+    # replace with zero since we do not need them anyway
+    labels["keypoints"] = 0
+    labels["box"] = 0
     return labels
-
-
-########## old testing code
-
-def PretrainReidNTU(config):
-    # base dataset
-    ntu = PretrainDataset(config)
-
-    # center crop
-    ntu = ProcessedDataset(ntu, center_crop)
-
-    # get multiple views of same pid
-    dataset = JoinedDataset(ntu, "pid", config.get("n_views", 4))
-
-    return dataset
-
-
-def QueryGalleryNTU(config):
-    n_examples = 100
-    prng = np.random.RandomState(1)
-    query = PretrainDataset(config)
-    query = SubDataset(query, prng.choice(len(query), n_examples))
-    gallery = PretrainDataset(config)
-    gallery = SubDataset(gallery, prng.choice(len(gallery), n_examples))
-
-    data = ConcatenatedDataset(query, gallery)
-    data = ProcessedDataset(data, center_crop)
-    return data
 
 
 # NTUGems

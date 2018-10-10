@@ -64,7 +64,10 @@ class reIdModel(object):
 
         with tf.variable_scope(self.model_name):
             self.images = tf.placeholder(tf.float32, shape=[None, h, w, nc])
-            endpoints, body_prefix = model.endpoints(self.images,
+            # edflow works with images in [-1,1] but reid net expects [0,255]
+            self.rescaled_images = (self.images+1.0)*127.5
+            input_images = self.rescaled_images
+            endpoints, body_prefix = model.endpoints(input_images,
                                                      is_training=is_train,
                                                      prefix=self.model_name + '/')
             with tf.name_scope('head'):
@@ -79,10 +82,12 @@ class reIdModel(object):
 
     @property
     def inputs(self):
+        # (bs, h, w, c) in [-1, 1]
         return {'image': self.images}
 
     @property
     def outputs(self):
+        # (bs, 128
         return {'embeddings': self.embeddings}
 
 
@@ -115,6 +120,7 @@ class Unstack(Hook):
             image = image[...,:3]
         feeds[self.iterator.model.inputs["image"]] = image
 
+        # add pids for training
         pids = batch["pid"]
         bs, n_views = pids.shape
         pids = pids.reshape(bs*n_views)
@@ -262,8 +268,6 @@ def resize(image, w=TRIP_W, h=TRIP_H):
             im = imresize(im, [w, h])
         ims += [im]
     ims = np.array(ims)
-    # edflow works with images in [-1,1] but reid net expects [0,255]
-    ims = (ims+1.0)*127.5
 
     return ims
 
