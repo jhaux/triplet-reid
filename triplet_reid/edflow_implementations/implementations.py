@@ -197,33 +197,11 @@ class Trainer(TFHookedModelIterator):
         self.hooks.append(ihook)
 
 
-class reIdEvaluator(HookedModelIterator):
-    def __init__(self, checkpoint, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.checkpoint = checkpoint
-
-    def step_ops(self):
-        return self.outputs
-
-    def fit(self, *args, **kwargs):
-        return self.iterate(*args, **kwargs)
-
-    def initialize(self):
-        pass
-
-    def get_init_op(self):
-        '''This overwrites the standart random initialization and forces
-        the network to be initialized from the downloadable checkpoint.
-        '''
-
-        initialize_model(self.model, self.checkpoint, self.session)
-
-        return tf.no_op()
-
-
 def initialize_model(model, checkpoint, session=None):
     '''Loads weights from a checkpointfile and initializes the model.
+    This function is just for the case of restoring the market-1501 pretrained
+    model because we have to map variable names correctly. For newly written
+    checkpoints use the RestoreCheckpointHook.
     =======> THIS FUNCTION IS ONLY INTENDED TO BE USED HERE <=======
     '''
 
@@ -244,19 +222,6 @@ def initialize_model(model, checkpoint, session=None):
     get_logger("initialize_model").info("Restored model from {}".format(checkpoint))
 
 
-class PrepData(Hook):
-    def __init__(self, image_pl, w=TRIP_W, h=TRIP_H):
-        '''Rescales the images fed to the reid model.'''
-        self.impl = image_pl
-        self.w = w
-        self.h = h
-
-    def before_step(self, step, fetches, feeds, batch):
-        image = batch['image']
-
-        feeds[self.impl] = resize(image, self.w, self.h)
-
-
 def resize(image, w=TRIP_W, h=TRIP_H):
     ims = []
     for im in image:
@@ -272,31 +237,12 @@ def resize(image, w=TRIP_W, h=TRIP_H):
     return ims
 
 
-def getReIdEvaluator(config,
-                     root,
-                     model,
-                     hook_freq):
-
-    hooks = [PrepData(model.inputs['image'])]
-
-    checkpoint = TRIP_CHECK
-
-    return reIdEvaluator(checkpoint,
-                         model,
-                         num_epochs=config['num_epochs'],
-                         hooks=hooks,
-                         hook_freq=hook_freq,
-                         bar_position=0,
-                         gpu_mem_growth=False,
-                         gpu_mem_fraction=None,
-                         nogpu=False)
-
-
-def pretrainedReIdModel(config):
-    return reIdModel()
-
-
 class reIdMetricFn(object):
+    """
+    Implements a metric to compare two images based on the difference between
+    their reid embeddings. Use the environment variable REID_CHECKPOINT to
+    select which checkpoint is to be used for computing embeddings.
+    """
     def __init__(self, session=None, sess_config=None,
                  allow_growth=None, mem_frac=None, nogpu=False):
         sess_config = sess_config or tf.ConfigProto()
