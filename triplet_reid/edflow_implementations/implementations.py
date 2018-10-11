@@ -134,7 +134,7 @@ class Trainer(TFHookedModelIterator):
         kwargs["hooks"] = [unstackhook]
         super().__init__(config, root, model, num_epochs = config["num_epochs"], **kwargs)
         self._init_step_ops()
-        restorer = RestoreTFModelHook(variables = tf.global_variables(),
+        restorer = RestoreTFModelHook(variables = self.model.variables,
                                       checkpoint_path = ProjectManager().checkpoints,
                                       global_step_setter = self.set_global_step)
         self.restorer = restorer
@@ -264,7 +264,7 @@ class reIdMetricFn(object):
         else:
             # assume this is checkpoint trained by ourselve
             with self.session.as_default():
-                restorer = RestoreTFModelHook(variables = tf.global_variables(),
+                restorer = RestoreTFModelHook(variables = self.model.variables,
                                               checkpoint_path = None)
                 restorer(TRIP_CHECK)
 
