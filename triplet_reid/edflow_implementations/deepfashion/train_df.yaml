@@ -1,0 +1,19 @@
+model: triplet_reid.edflow_implementations.implementations.EdflowModel
+
+dataset: triplet_reid.edflow_implementations.deepfashion.data.StochasticPairs
+data_root: data/deepfashion/images
+data_csv: data/deepfashion/train.csv
+
+iterator: triplet_reid.edflow_implementations.implementations.Trainer
+
+n_views: 4
+batch_size: 16
+spatial_size: 256
+n_data_processes: 2
+
+hook_freq: 250
+log_freq: 500
+ckpt_freq: 500
+num_steps: 25000
+
+learning_rate: 1.0e-5
