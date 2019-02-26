@@ -24,9 +24,7 @@ from triplet_reid.excluders.ntugems import Excluder
 # path to checkpoint-25000 contained in
 # https://github.com/VisualComputingInstitute/triplet-reid/releases/download/250eb1/market1501_weights.zip
 TRIP_CHECK = os.environ.get('REID_CHECKPOINT',
-                            '/home/johannes/Documents/Uni HD/Dr_J/'
-                            'Projects/triplet_reid/triplet_reid/'
-                            'pretrained/checkpoint-25000')
+                            'checkpoints/checkpoint-25000')
 
 TRIP_W = 128
 TRIP_H = 256
@@ -132,7 +130,9 @@ class Trainer(TFHookedModelIterator):
         unstackhook = Unstack(self)
         kwargs["hook_freq"] = 1
         kwargs["hooks"] = [unstackhook]
-        super().__init__(config, root, model, num_epochs = config["num_epochs"], **kwargs)
+        if "num_epochs" not in kwargs:
+            kwargs["num_epochs"] = config["num_epochs"]
+        super().__init__(config, root, model, **kwargs)
         self._init_step_ops()
         restorer = RestoreTFModelHook(variables = self.model.variables,
                                       checkpoint_path = ProjectManager().checkpoints,
