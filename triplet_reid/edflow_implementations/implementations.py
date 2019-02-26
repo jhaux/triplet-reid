@@ -368,7 +368,7 @@ class EvalHook(Hook):
                 logwarn = self.logger.warn
                 logwarn("WARNING: encountered an AP of NaN!")
                 logwarn("This usually means a person only appears once.")
-                logwarn("In this case, it's because of {}.".format(query_data["fid"][i]))
+                logwarn("In this case, it's because of {}.".format(query_data["name"][i]))
                 logwarn("I'm excluding this person from eval and carrying on.")
                 continue
 
