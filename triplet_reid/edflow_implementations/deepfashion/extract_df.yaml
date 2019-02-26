@@ -1,0 +1,11 @@
+model: triplet_reid.edflow_implementations.implementations.EdflowModel
+
+dataset: triplet_reid.edflow_implementations.deepfashion.data.FromCSV
+data_root: data/deepfashion/images
+data_csv: data/deepfashion/traintest.csv
+
+iterator: triplet_reid.edflow_implementations.implementations.Extractor
+
+batch_size: 16
+spatial_size: 256
+n_data_processes: 2
