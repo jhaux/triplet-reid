@@ -445,3 +445,59 @@ class Evaluator(TFHookedModelIterator):
             initialize_model(self.model, checkpoint_path, self.session)
         else:
             self.restorer(checkpoint_path)
+
+
+class ExtractHook(Hook):
+    """Extract representations"""
+    def __init__(self, iterator, model):
+        self.get_global_step = iterator.get_global_step
+        self._root = ProjectManager.latest_eval
+        self.model = model
+
+    def before_epoch(self, epoch):
+        self.root = os.path.join(self._root, "extract", "{:06}".format(self.get_global_step()))
+        os.makedirs(self.root)
+
+    def before_step(self, step, fetches, feeds, batch):
+        self.paths = batch["name"]
+        assert all([not x.startswith("/") for x in self.paths]), self.paths
+
+    def after_step(self, step, results):
+        embeddings = retrieve("step_ops/emb", results)
+        for i, path in enumerate(self.paths):
+            extracted = embeddings[i]
+            out_path = path + "_alpha.npy"
+            out_path = os.path.join(self.root, out_path)
+            os.makedirs(os.path.split(out_path)[0], exist_ok = True)
+            np.save(out_path, extracted)
+
+
+class Extractor(TFHookedModelIterator):
+    def __init__(self, config, root, model, **kwargs):
+        config["eval_forever"] = True
+        kwargs["num_epochs"] = 1
+        super().__init__(config, root, model, **kwargs)
+
+        restorer = RestoreTFModelHook(variables = tf.global_variables(),
+                                      checkpoint_path = ProjectManager().checkpoints,
+                                      global_step_setter = self.set_global_step)
+        self.restorer = restorer
+        waiter = WaitForCheckpointHook(checkpoint_root = ProjectManager().checkpoints,
+                                       callback = restorer)
+        evaluation = ExtractHook(self, model)
+
+        self.hooks += [
+                waiter,
+                evaluation]
+        self.initialize()
+
+    def step_ops(self):
+        return {"emb": self.model.outputs["embeddings"]["emb"]}
+
+    def initialize(self, checkpoint_path = None):
+        # if none given use market pretrained
+        if checkpoint_path is None:
+            checkpoint_path = checkpoint_path or TRIP_CHECK
+            initialize_model(self.model, checkpoint_path, self.session)
+        else:
+            self.restorer(checkpoint_path)
