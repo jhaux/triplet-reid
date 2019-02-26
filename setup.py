@@ -7,6 +7,6 @@ setup(name='triplet_reid',
       author='Hermans*, Alexander and Beyer*, Lucas and Leibe, Bastian',
       packages=['triplet_reid'],
       install_requires=[
-          'tensorflow',
+          #'tensorflow',
           ],
       zip_safe=False)
