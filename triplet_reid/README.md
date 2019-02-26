@@ -1,3 +1,30 @@
+# Triplet-based Person Re-Identification with support for EdFlow.
+
+Training and evaluation possible with edflow. For a recent example how to use
+it, see `triplet_reid/edflow_implementations/deepfashion`. Make sure to add a symbolic link
+in `data/deepfashion/images` pointing to the actual image data, i.e. the folder
+containing `filted_up_train` etc. Default behaviour is to finetune from the
+Market-1501 checkpoint, which must also be
+[downloaded](https://github.com/VisualComputingInstitute/triplet-reid/releases/download/250eb1/market1501_weights.zip)
+into `checkpoints` and unzipped.
+
+For training, single dataset examples should contain
+- image: h,w,c images in [-1,1]. By default, the network works with w = 128, h = 256.
+- name: a string identifying the image. Can be the relative path.
+- pid: a string identifying the (person) id.
+
+and each training example should stack multiple examples with the same pid.
+
+For evaluation, examples should be single images and additionally contain a key
+`dataset_index_`: A value of `0` means query image; a value of `1` means
+gallery image.
+
+For each image in the query set, the nearest neighbors from the gallery are
+retrieved and evaluated. By default, matching the query image itself is
+ignored (by the diagonal excluder, see `triplet-reid/excluders`). Therefore, it
+is safe to have query images in the gallery.
+
+
 # Triplet-based Person Re-Identification
 
 Code for reproducing the results of our [In Defense of the Triplet Loss for Person Re-Identification](https://arxiv.org/abs/1703.07737) paper.
