@@ -137,3 +137,29 @@ class Eval(DatasetMixin):
             example = self.gallery_data.get_example(idx)
             example["dataset_index_"] = 1
         return example
+
+
+class FromCSVWithEmbedding(FromCSV):
+    def __init__(self, config, ignore_image = True):
+        super().__init__(config)
+        self.postfix = config.get("embedding_postfix", "_alpha.npy")
+        self.embedding_root = config["embedding_root"]
+        self.labels["embedding_path_"] = list()
+        for i in range(len(self)):
+            relpath = self.labels["relative_file_path_"][i]
+            p = os.path.join(self.embedding_root, relpath) + self.postfix
+            self.labels["embedding_path_"].append(p)
+        self.ignore_image = ignore_image
+
+    def preprocess_embedding(self, path):
+        embedding = np.load(path)
+        return embedding
+
+    def get_example(self, i):
+        output = {
+                "pid": self.labels["character_id"][i],
+                "name": self.labels["relative_file_path_"][i],
+                "embedding": self.preprocess_embedding(self.labels["embedding_path_"][i])}
+        if not self.ignore_image:
+            output["image"] = self.preprocess_image(self.labels["file_path_"][i])
+        return output
