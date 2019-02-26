@@ -19,7 +19,8 @@ from edflow.custom_logging import get_logger
 from edflow.util import retrieve, walk
 
 import triplet_reid.loss as loss
-from triplet_reid.excluders.ntugems import Excluder
+from triplet_reid.excluders.diagonal import Excluder as DiagonalExcluder
+from triplet_reid.excluders.ntugems import Excluder as NTUExcluder
 
 # path to checkpoint-25000 contained in
 # https://github.com/VisualComputingInstitute/triplet-reid/releases/download/250eb1/market1501_weights.zip
@@ -348,6 +349,7 @@ class EvalHook(Hook):
         # Get a mask indicating True for those gallery entries that should
         # be ignored for whatever reason (same camera, junk, ...) and
         # exclude those in a way that doesn't affect CMC and mAP.
+        Excluder = DiagonalExcluder
         excluder = Excluder(gallery_data["name"])
         mask = excluder(query_data["name"])
         distances[mask] = np.inf
@@ -364,12 +366,10 @@ class EvalHook(Hook):
 
             if np.isnan(ap):
                 logwarn = self.logger.warn
-                logwarn()
                 logwarn("WARNING: encountered an AP of NaN!")
                 logwarn("This usually means a person only appears once.")
                 logwarn("In this case, it's because of {}.".format(query_data["fid"][i]))
                 logwarn("I'm excluding this person from eval and carrying on.")
-                logwarn()
                 continue
 
             aps.append(ap)
@@ -404,7 +404,8 @@ class EvalHook(Hook):
 class Evaluator(TFHookedModelIterator):
     def __init__(self, config, root, model, **kwargs):
         config["eval_forever"] = True
-        super().__init__(config, root, model, num_epochs = 1, **kwargs)
+        kwargs["num_epochs"] = 1
+        super().__init__(config, root, model, **kwargs)
 
         restorer = RestoreTFModelHook(variables = tf.global_variables(),
                                       checkpoint_path = ProjectManager().checkpoints,
