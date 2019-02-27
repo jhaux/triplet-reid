@@ -141,6 +141,8 @@ class Trainer(TFHookedModelIterator):
         self.restorer = restorer
 
     def initialize(self, checkpoint_path = None):
+        init_op = tf.variables_initializer(tf.global_variables())
+        self.session.run(init_op)
         # if none given use market pretrained
         if checkpoint_path is None:
             checkpoint_path = TRIP_CHECK
