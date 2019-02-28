@@ -1,6 +1,6 @@
 import sys
 sys.path.append(".")
-import yaml
+import yaml, os, json
 from triplet_reid.edflow_implementations.deepfashion.data import FromCSVWithEmbedding
 from tqdm import trange
 import numpy as np
@@ -74,8 +74,46 @@ def evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix):
     info = '{}/**/*{} | mAP: {:.2%} | top-1: {:.2%} top-2: {:.2%} | top-5: {:.2%} | top-10: {:.2%}'.format(
         embedding_root, embedding_postfix, mean_ap, cmc[0], cmc[1], cmc[4], cmc[9])
     print(info)
-    return info
 
+    # Retrieval data for easy plotting
+    n_retrievals = 10
+    retrievals = np.argsort(distances, axis = 1)
+    print(distances.shape)
+    print(retrievals.shape)
+    retrievals = retrievals[:, :n_retrievals]
+    query_names = query_data["name"]
+    retrieval_names = [
+            [gallery_data["name"][retrieve_idx] for retrieve_idx in retrievals[query_idx]]
+            for query_idx in range(retrievals.shape[0])]
+    retrieval_match = [
+            [pid_matches[query_idx, retrieve_idx] for retrieve_idx in retrievals[query_idx]]
+            for query_idx in range(retrievals.shape[0])]
+    retrieval_data = {
+            "query_names": query_names,
+            "retrieval_names": retrieval_names,
+            "retrieval_match": retrieval_match}
+    retrieval_data["info"] = {
+            "mAP": mean_ap,
+            "cmc": cmc}
+
+    return info, retrieval_data
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """ Special json encoder for numpy types """
+    def default(self, obj):
+        if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
+            np.int16, np.int32, np.int64, np.uint8,
+            np.uint16, np.uint32, np.uint64)):
+            return int(obj)
+        elif isinstance(obj, (np.float_, np.float16, np.float32,
+            np.float64)):
+            return float(obj)
+        elif isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        elif isinstance(obj,(np.ndarray,)): #### This is the fix
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 
 
 if __name__ == "__main__":
@@ -109,4 +147,9 @@ if __name__ == "__main__":
     gallery_dataset = FromCSVWithEmbedding(gallery_config)
     print(len(query_dataset))
     print(len(gallery_dataset))
-    info = evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix)
+    info, retrieval_data = evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix)
+    out_path = "retrieval_data" + embedding_postfix + ".json"
+    out_path = os.path.join(embedding_root, out_path)
+    with open(out_path, "w") as f:
+        json.dump(retrieval_data, f, cls = NumpyEncoder)
+    print("Wrote {}".format(out_path))
