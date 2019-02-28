@@ -150,9 +150,19 @@ class FromCSVWithEmbedding(FromCSV):
             p = os.path.join(self.embedding_root, relpath) + self.postfix
             self.labels["embedding_path_"].append(p)
         self.ignore_image = ignore_image
+        self.z_size = config.get("z_size", None)
 
     def preprocess_embedding(self, path):
         embedding = np.load(path)
+        if self.z_size is not None and len(embedding) != self.z_size:
+            # expect mean followed by symmetric covariance with log diagonals
+            assert len(embedding) == int(self.z_size + self.z_size*(self.z_size+1)/2)
+            # extract mean
+            embedding = embedding[:self.z_size]
+            if getattr(self, "_dolog", True):
+                print("Extracted mean from what looks like a mean and symmetric "
+                      "covariance parameterization.")
+                self._dolog = False
         return embedding
 
     def get_example(self, i):

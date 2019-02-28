@@ -10,30 +10,8 @@ from triplet_reid.excluders.diagonal import Excluder as DiagonalExcluder
 from scipy.spatial.distance import cdist
 from sklearn.metrics import average_precision_score
 
-if __name__ == "__main__":
-    #embedding_root = "data/deepfashion/embeddings"
-    #embedding_postfix = "_alpha.npz"
 
-    embedding_root = "data/deepfashion/embeddings_both_df128_450000"
-    embedding_postfix = "_z_cond.npy"
-
-    query_config = {
-            "spatial_size":         256,
-            "data_root":            "data/deepfashion/images",
-            "embedding_root":       embedding_root,
-            "embedding_postfix":    embedding_postfix,
-            "data_csv":       "data/deepfashion/query.csv"}
-    query_dataset = FromCSVWithEmbedding(query_config)
-    gallery_config = {
-            "spatial_size":         256,
-            "data_root":            "data/deepfashion/images",
-            "embedding_root":       embedding_root,
-            "embedding_postfix":    embedding_postfix,
-            "data_csv":     "data/deepfashion/gallery.csv"}
-    gallery_dataset = FromCSVWithEmbedding(gallery_config)
-    print(len(query_dataset))
-    print(len(gallery_dataset))
-
+def evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix):
     # load required data
     def load(data):
         keys = ["pid", "name", "embedding"]
@@ -93,5 +71,42 @@ if __name__ == "__main__":
     mean_ap = np.mean(aps)
 
     # Print out a short summary.
-    print('{} | mAP: {:.2%} | top-1: {:.2%} top-2: {:.2%} | top-5: {:.2%} | top-10: {:.2%}'.format(
-        embedding_root, mean_ap, cmc[0], cmc[1], cmc[4], cmc[9]))
+    info = '{}/**/*{} | mAP: {:.2%} | top-1: {:.2%} top-2: {:.2%} | top-5: {:.2%} | top-10: {:.2%}'.format(
+        embedding_root, embedding_postfix, mean_ap, cmc[0], cmc[1], cmc[4], cmc[9])
+    print(info)
+    return info
+
+
+
+if __name__ == "__main__":
+    #embedding_root = "data/deepfashion/embeddings"
+    #embedding_postfix = "_alpha.npz"
+
+    #embedding_root = "data/deepfashion/embeddings_both_df128_450000"
+    embedding_root = "data/deepfashion/embeddings_first_stage_450000"
+    #embedding_postfix = "_z_cond.npy"
+    embedding_postfix = "_z_posterior_parameters.npy"
+
+    z_size = None
+    if embedding_postfix == "_z_posterior_parameters.npy":
+        z_size = 128
+
+    query_config = {
+            "spatial_size":         256,
+            "data_root":            "data/deepfashion/images",
+            "embedding_root":       embedding_root,
+            "embedding_postfix":    embedding_postfix,
+            "data_csv":             "data/deepfashion/query.csv",
+            "z_size":               z_size}
+    query_dataset = FromCSVWithEmbedding(query_config)
+    gallery_config = {
+            "spatial_size":         256,
+            "data_root":            "data/deepfashion/images",
+            "embedding_root":       embedding_root,
+            "embedding_postfix":    embedding_postfix,
+            "data_csv":             "data/deepfashion/gallery.csv",
+            "z_size":               z_size}
+    gallery_dataset = FromCSVWithEmbedding(gallery_config)
+    print(len(query_dataset))
+    print(len(gallery_dataset))
+    info = evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix)
