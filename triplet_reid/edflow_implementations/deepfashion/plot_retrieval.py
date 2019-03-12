@@ -8,6 +8,9 @@ if __name__ == "__main__":
     parser.add_argument("data_root")
     parser.add_argument("retrieval_data")
     parser.add_argument("name")
+    parser.add_argument("out_path")
+    parser.add_argument("--n_nearest", default = None, type = int)
+    parser.add_argument("--show_farthest", default = True, action = "store_true")
     opt = parser.parse_args()
     embedding_name = opt.name
 
@@ -15,8 +18,22 @@ if __name__ == "__main__":
         retrieval_data = json.load(f)
     root = opt.data_root
 
+    n_retrievals = len(retrieval_data["retrieval_names"][0])
+    #n_retrievals = 5
+    if opt.n_nearest is not None:
+        assert 2*opt.n_nearest < n_retrievals
+        if opt.show_farthest:
+            n_retrievals = 2*opt.n_nearest
+        else:
+            n_retrievals = opt.n_nearest
+    if opt.show_farthest:
+        assert n_retrievals % 2 == 0
+        n_nearest = int(n_retrievals / 2)
+    else:
+        n_nearest = n_retrievals
+
     n_rows = 1 + 10
-    n_cols = 1 + 5
+    n_cols = 1 + n_retrievals
     ar = n_cols / n_rows
     figheight = 10.0
     figwidth = figheight*ar
@@ -30,12 +47,26 @@ if __name__ == "__main__":
             horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     ax.set_xticks([])
     ax.set_yticks([])
-    ax = fig.add_subplot(gs[0,1:])
-    ax.text(0.5, 0.5,
-            'retrieval based on\n{}'.format(embedding_name),
-            horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-    ax.set_xticks([])
-    ax.set_yticks([])
+    if not opt.show_farthest:
+        ax = fig.add_subplot(gs[0,1:])
+        ax.text(0.5, 0.5,
+                'retrieval based on\n{}'.format(embedding_name),
+                horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        ax.set_xticks([])
+        ax.set_yticks([])
+    else:
+        ax = fig.add_subplot(gs[0,1:1+n_nearest])
+        ax.text(0.5, 0.5,
+                'nearest retrieval based on\n{}'.format(embedding_name),
+                horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax = fig.add_subplot(gs[0,1+n_nearest:])
+        ax.text(0.5, 0.5,
+                'farthest retrieval based on\n{}'.format(embedding_name),
+                horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        ax.set_xticks([])
+        ax.set_yticks([])
 
     prng = np.random.RandomState(1)
     query_indices = prng.choice(len(retrieval_data["query_names"]), size = n_rows - 1)
@@ -53,7 +84,11 @@ if __name__ == "__main__":
         ax.set_yticks([])
 
         for j in range(n_cols-1):
-            path = retrieval_data["retrieval_names"][i_query][j]
+            if opt.show_farthest and j >= n_nearest:
+                j_retrieval = j - 2*n_nearest
+            else:
+                j_retrieval = j
+            path = retrieval_data["retrieval_names"][i_query][j_retrieval]
             path = os.path.join(root, path)
             I = plt.imread(path)
 
@@ -63,7 +98,7 @@ if __name__ == "__main__":
             ax.set_xticks([])
             ax.set_yticks([])
 
-            match = retrieval_data["retrieval_match"][i_query][j]
+            match = retrieval_data["retrieval_match"][i_query][j_retrieval]
             if match:
                 color = "green"
             else:
@@ -72,5 +107,5 @@ if __name__ == "__main__":
                 ax.spines[which].set_color(color)
 
     gs.tight_layout(figure = fig, pad = 0)
-    path = "retrieval.png"
+    path = opt.out_path
     fig.savefig(path, dpi = 300)

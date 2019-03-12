@@ -163,6 +163,10 @@ class FromCSVWithEmbedding(FromCSV):
                 print("Extracted mean from what looks like a mean and symmetric "
                       "covariance parameterization.")
                 self._dolog = False
+        if len(embedding.shape) == 3:
+            assert embedding.shape[0] == embedding.shape[1] == 1, embedding.shape
+            embedding = np.squeeze(embedding, axis = 0)
+            embedding = np.squeeze(embedding, axis = 0)
         return embedding
 
     def get_example(self, i):

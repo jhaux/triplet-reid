@@ -11,7 +11,7 @@ from scipy.spatial.distance import cdist
 from sklearn.metrics import average_precision_score
 
 
-def evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix):
+def evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix, n_retrievals = 10):
     # load required data
     def load(data):
         keys = ["pid", "name", "embedding"]
@@ -76,11 +76,12 @@ def evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix):
     print(info)
 
     # Retrieval data for easy plotting
-    n_retrievals = 10
+    cutoff = 1000
     retrievals = np.argsort(distances, axis = 1)
     print(distances.shape)
     print(retrievals.shape)
-    retrievals = retrievals[:, :n_retrievals]
+    retrievals = np.concatenate(
+            [retrievals[:, :n_retrievals], retrievals[:, -n_retrievals-cutoff:-cutoff]], axis = 1)
     query_names = query_data["name"]
     retrieval_names = [
             [gallery_data["name"][retrieve_idx] for retrieve_idx in retrievals[query_idx]]
@@ -116,19 +117,7 @@ class NumpyEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-if __name__ == "__main__":
-    #embedding_root = "data/deepfashion/embeddings"
-    #embedding_postfix = "_alpha.npz"
-
-    #embedding_root = "data/deepfashion/embeddings_both_df128_450000"
-    embedding_root = "data/deepfashion/embeddings_first_stage_450000"
-    #embedding_postfix = "_z_cond.npy"
-    embedding_postfix = "_z_posterior_parameters.npy"
-
-    z_size = None
-    if embedding_postfix == "_z_posterior_parameters.npy":
-        z_size = 128
-
+def run(embedding_root, embedding_postfix, z_size, n_retrievals = 10):
     query_config = {
             "spatial_size":         256,
             "data_root":            "data/deepfashion/images",
@@ -147,9 +136,36 @@ if __name__ == "__main__":
     gallery_dataset = FromCSVWithEmbedding(gallery_config)
     print(len(query_dataset))
     print(len(gallery_dataset))
-    info, retrieval_data = evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix)
+    info, retrieval_data = evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix, n_retrievals)
     out_path = "retrieval_data" + embedding_postfix + ".json"
     out_path = os.path.join(embedding_root, out_path)
     with open(out_path, "w") as f:
         json.dump(retrieval_data, f, cls = NumpyEncoder)
     print("Wrote {}".format(out_path))
+
+
+def old():
+    #embedding_root = "data/deepfashion/embeddings"
+    #embedding_postfix = "_alpha.npz"
+
+    #embedding_root = "data/deepfashion/embeddings_both_df128_450000"
+    embedding_root = "data/deepfashion/embeddings_first_stage_450000"
+    #embedding_postfix = "_z_cond.npy"
+    embedding_postfix = "_z_posterior_parameters.npy"
+
+    z_size = None
+    if embedding_postfix == "_z_posterior_parameters.npy":
+        z_size = 128
+
+    run(embedding_root, embedding_postfix, z_size)
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("embedding_root")
+    parser.add_argument("embedding_postfix")
+    parser.add_argument("--z_size", default = None)
+    parser.add_argument("--n_retrievals", default = 10)
+    opt = parser.parse_args()
+    run(opt.embedding_root, opt.embedding_postfix, opt.z_size, opt.n_retrievals)
