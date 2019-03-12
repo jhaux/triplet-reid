@@ -11,7 +11,8 @@ from scipy.spatial.distance import cdist
 from sklearn.metrics import average_precision_score
 
 
-def evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix, n_retrievals = 10):
+def evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix,
+        n_retrievals = 10, cutoff = 2000):
     # load required data
     def load(data):
         keys = ["pid", "name", "embedding"]
@@ -76,7 +77,6 @@ def evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix, 
     print(info)
 
     # Retrieval data for easy plotting
-    cutoff = 1000
     retrievals = np.argsort(distances, axis = 1)
     print(distances.shape)
     print(retrievals.shape)
@@ -117,7 +117,7 @@ class NumpyEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-def run(embedding_root, embedding_postfix, z_size, n_retrievals = 10):
+def run(embedding_root, embedding_postfix, z_size, n_retrievals = 10, cutoff = 2000):
     query_config = {
             "spatial_size":         256,
             "data_root":            "data/deepfashion/images",
@@ -136,7 +136,8 @@ def run(embedding_root, embedding_postfix, z_size, n_retrievals = 10):
     gallery_dataset = FromCSVWithEmbedding(gallery_config)
     print(len(query_dataset))
     print(len(gallery_dataset))
-    info, retrieval_data = evaluate(query_dataset, gallery_dataset, embedding_root, embedding_postfix, n_retrievals)
+    info, retrieval_data = evaluate(query_dataset, gallery_dataset,
+            embedding_root, embedding_postfix, n_retrievals, cutoff)
     out_path = "retrieval_data" + embedding_postfix + ".json"
     out_path = os.path.join(embedding_root, out_path)
     with open(out_path, "w") as f:
@@ -166,6 +167,7 @@ if __name__ == "__main__":
     parser.add_argument("embedding_root")
     parser.add_argument("embedding_postfix")
     parser.add_argument("--z_size", default = None)
-    parser.add_argument("--n_retrievals", default = 10)
+    parser.add_argument("--n_retrievals", default = 10, type = int)
+    parser.add_argument("--cutoff", default = 2000, type = int)
     opt = parser.parse_args()
-    run(opt.embedding_root, opt.embedding_postfix, opt.z_size, opt.n_retrievals)
+    run(opt.embedding_root, opt.embedding_postfix, opt.z_size, opt.n_retrievals, opt.cutoff)
