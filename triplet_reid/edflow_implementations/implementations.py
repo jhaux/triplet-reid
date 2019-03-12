@@ -31,6 +31,30 @@ TRIP_W = 128
 TRIP_H = 256
 
 
+def make_network(
+        images,
+        edim=128,
+        name = 'my_triplet_is_the_best_triplet',
+        model_name='resnet_v1_50',
+        head_name='fc1024',
+        is_train = True
+        ):
+    model = import_module('triplet_reid.nets.' + model_name)
+    head = import_module('triplet_reid.heads.' + head_name)
+
+    with tf.variable_scope(name, reuse = tf.AUTO_REUSE):
+        # edflow works with images in [-1,1] but reid net expects [0,255]
+        input_images = (images+1.0)*127.5
+        endpoints, body_prefix = model.endpoints(input_images,
+                                                 is_training=is_train,
+                                                 prefix=name + '/')
+        with tf.name_scope('head'):
+            endpoints = head.head(endpoints,
+                                  edim,
+                                  is_training=is_train)
+    return endpoints, name
+
+
 class reIdModel(object):
     '''ReID model as from the paper "In defense of the triplet loss"'''
 
