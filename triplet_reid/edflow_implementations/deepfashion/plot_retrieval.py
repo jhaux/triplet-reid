@@ -11,6 +11,7 @@ if __name__ == "__main__":
     parser.add_argument("out_path")
     parser.add_argument("--n_nearest", default = None, type = int)
     parser.add_argument("--show_farthest", default = True, action = "store_true")
+    parser.add_argument("--write_retrievals", default = None, type = int)
     opt = parser.parse_args()
     embedding_name = opt.name
 
@@ -109,3 +110,21 @@ if __name__ == "__main__":
     gs.tight_layout(figure = fig, pad = 0)
     path = opt.out_path
     fig.savefig(path, dpi = 300)
+
+    if opt.write_retrievals is not None:
+        relpaths = list()
+        query_index = opt.write_retrievals
+        i_query = query_indices[query_index]
+        query_relpath = retrieval_data["query_names"][i_query]
+        relpaths.append(query_relpath)
+        for j in range(n_retrievals):
+            if opt.show_farthest and j >= n_nearest:
+                j_retrieval = j - 2*n_nearest
+            else:
+                j_retrieval = j
+            retrieval_relpath = retrieval_data["retrieval_names"][i_query][j_retrieval]
+            relpaths.append(retrieval_relpath)
+        csv_path = opt.out_path+"_{}_retrieval.csv".format(query_index)
+        with open(csv_path, "w") as f:
+            f.write("\n".join(relpaths)+"\n")
+        print("Wrote {}".format(csv_path))
