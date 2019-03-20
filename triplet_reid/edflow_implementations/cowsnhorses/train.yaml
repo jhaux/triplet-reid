@@ -1,8 +1,8 @@
 model: triplet_reid.edflow_implementations.implementations.EdflowModel
 
 dataset: triplet_reid.edflow_implementations.deepfashion.data.StochasticPairs
-data_root: /export/home/pesser/exportscratch/lasot_cropped
-data_csv: /export/home/pesser/exportscratch/lasot_cropped/all.csv
+data_root: /export/home/pesser/exportscratch/combined_chs
+data_csv: /export/home/pesser/exportscratch/combined_chs/all.csv
 
 iterator: triplet_reid.edflow_implementations.implementations.Trainer
 

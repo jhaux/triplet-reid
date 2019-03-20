@@ -37,6 +37,7 @@ class StochasticPairs(DatasetMixin, PRNGMixin):
         self.size = config["spatial_size"]
         self.root = config["data_root"]
         self.csv = config["data_csv"]
+        self.flip = config.get("data_flip", False)
         with open(self.csv) as f:
             lines = f.read().splitlines()
         self._length = len(lines)
@@ -55,6 +56,9 @@ class StochasticPairs(DatasetMixin, PRNGMixin):
         image = load_image(image_path)
         image = resize(image, self.size)
         image = center_crop(image)
+        if self.flip:
+            if self.prng.choice([True, False]):
+                image = np.flip(image, axis = 1)
         return image
 
     def get_example(self, i):
