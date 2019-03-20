@@ -1,0 +1,20 @@
+model: triplet_reid.edflow_implementations.implementations.EdflowModel
+
+dataset: triplet_reid.edflow_implementations.deepfashion.data.StochasticPairs
+data_root: /export/scratch/pesser/mix10k_cropped
+data_csv: /export/scratch/pesser/mix10k_cropped/all.csv
+data_flip: True
+
+iterator: triplet_reid.edflow_implementations.implementations.Trainer
+
+n_views: 4
+batch_size: 16
+spatial_size: 256
+n_data_processes: 2
+
+hook_freq: 250
+log_freq: 500
+ckpt_freq: 500
+num_steps: 100000
+
+learning_rate: 1.0e-5
