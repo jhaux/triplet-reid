@@ -7,11 +7,22 @@ from scipy.misc import imresize
 from scipy.spatial.distance import cdist
 from sklearn.metrics import average_precision_score
 
-from edflow.iterators.model_iterator import HookedModelIterator, TFHookedModelIterator
+try:
+    from edflow.iterators.model_iterator import HookedModelIterator, TFHookedModelIterator
+except ImportError:
+    from edflow.iterators.tf_iterator import HookedModelIterator, TFHookedModelIterator
 from edflow.hooks.hook import Hook
-from edflow.hooks.train_hooks import LoggingHook, CheckpointHook
-from edflow.hooks.evaluation_hooks import (
-        WaitForCheckpointHook, RestoreTFModelHook, KeepBestCheckpoints)
+try:
+    from edflow.hooks.train_hooks import LoggingHook, CheckpointHook
+except ImportError:
+    from edflow.hooks.logging_hooks.tf_logging_hook import LoggingHook
+    from edflow.hooks.checkpoint_hooks.tf_checkpoint_hook import CheckpointHook
+try:
+    from edflow.hooks.evaluation_hooks import (
+            WaitForCheckpointHook, RestoreTFModelHook, KeepBestCheckpoints)
+except ImportError:
+    from edflow.hooks.checkpoint_hooks.tf_checkpoint_hook import RestoreTFModelHook
+    from edflow.hooks.checkpoint_hooks.common import WaitForCheckpointHook, KeepBestCheckpoints
 from edflow.hooks.util_hooks import IntervalHook
 from edflow.iterators.resize import resize_float32
 from edflow.project_manager import ProjectManager
